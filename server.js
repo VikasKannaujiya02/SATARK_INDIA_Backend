@@ -491,8 +491,7 @@ async function seedHeatmapIfEmpty() {
 }
 
 // Serverless readiness: export app, run server only when executed directly
-const isMainModule = process.argv[1] && fileURLToPath(process.argv[1]) === __filename;
-
+const isMainModule = process.argv[1] && process.argv[1] === __filename;
 if (isMainModule) {
     if (!MONGODB_URI) {
         console.error('❌ MONGODB_URI is required in .env');
