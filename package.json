@@ -1,0 +1,26 @@
+{
+  "name": "satark_india",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "cd \"SATARK_INDIA Fronted\" && npm run dev",
+    "build": "cd \"SATARK_INDIA Fronted\" && npm run build",
+    "start": "cd \"SATARK_INDIA Fronted\" && npm run start",
+    "lint": "cd \"SATARK_INDIA Fronted\" && npm run lint",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "server": "node \"SATARK_INDIA Backend/server.js\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "axios": "^1.13.5",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.2.1"
+  }
+}
