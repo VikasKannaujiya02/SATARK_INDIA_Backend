@@ -501,7 +501,9 @@ if (isMainModule) {
         .then(() => seedHeatmapIfEmpty())
         .then(() => {
             console.log('✅ MongoDB connected successfully!');
-            app.listen(PORT, () => {
+            
+            // JUST ADD NEW RENDER FRIENDLY VARIABLE 
+            app.listen(PORT, '0.0.0.0', () => {
                 import('os').then((os) => {
                     const nets = os.default.networkInterfaces();
                     let ipv4 = 'localhost';
