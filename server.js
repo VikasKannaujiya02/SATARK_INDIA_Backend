@@ -64,12 +64,18 @@ app.post('/api/auth/send-otp', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-// --- EMAIL OTP SETUP ---
+
+// --- EMAIL OTP SETUP (FIXED WITH SECURE TLS FOR RENDER) ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // true for 465, false for other ports
     auth: {
         user: 'vikashkannaujiya1332004@gmail.com', 
-        pass: 'zpzeifgwrwrghasf' // Spaces hata diye hain taaki error na aaye
+        pass: 'zpzeifgwrwrghasf' // Spaces hata diye hain
+    },
+    tls: {
+        rejectUnauthorized: false // IMPORTANT: Ye Render ko Gmail se connect hone dega bina timeout ke
     }
 });
 
@@ -117,7 +123,8 @@ app.post('/api/auth/verify-email-otp', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-// 2b. Verify OTP & Issue JWT
+
+// 2b. Verify OTP & Issue JWT (Fast2SMS Wala)
 app.post('/api/auth/verify-otp', async (req, res) => {
     try {
         const { phone, otp } = req.body;
@@ -177,7 +184,7 @@ app.post('/api/sos/trigger', async (req, res) => {
         console.log(`${RED}║  👤 Name: ${(name || 'N/A')}${RESET}`);
         console.log(`${RED}║  📱 Phone: ${(phone || 'N/A')}${RESET}`);
         console.log(`${RED}║  📍 Location: ${(location || 'Unknown')}${RESET}`);
-        console.log(`${RED}║  📡 Action: Family Network is being notified...                 ║${RESET}`);
+        console.log(`${RED}║  📡 Action: Family Network is being notified...                  ║${RESET}`);
         console.log(`${RED}╚══════════════════════════════════════════════════════════════════╝${RESET}\n`);
 
         // Generate Google Maps link from coordinates
