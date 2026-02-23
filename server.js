@@ -1,3 +1,4 @@
+import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -63,7 +64,59 @@ app.post('/api/auth/send-otp', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+// --- EMAIL OTP SETUP ---
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'vikashkannaujiya1332004@gmail.com', 
+        pass: 'zpzeifgwrwrghasf' // Spaces hata diye hain taaki error na aaye
+    }
+});
 
+// Email OTP bhejne ka rasta
+app.post('/api/auth/send-email-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email required' });
+        
+        const otp = String(Math.floor(1000 + Math.random() * 9000));
+        otpStore.set(email, { otp, expires: Date.now() + 5 * 60 * 1000 });
+
+        await transporter.sendMail({
+            from: 'vikashkannaujiya1332004@gmail.com',
+            to: email,
+            subject: 'Satark India - Login OTP 🚨',
+            text: `Namaskar!\n\nWelcome to Satark India.\nYour verification OTP is: ${otp}\n\nStay Safe,\nTeam Satark India`
+        });
+        res.status(200).json({ success: true, message: 'Email OTP sent' });
+    } catch (err) {
+        console.error("Email error:", err.message);
+        res.status(500).json({ error: 'Failed to send Email OTP' });
+    }
+});
+
+// Email OTP Verify karne ka rasta
+app.post('/api/auth/verify-email-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const stored = otpStore.get(email);
+        
+        if (!stored || stored.expires < Date.now()) return res.status(401).json({ error: 'OTP expired' });
+        if (stored.otp !== String(otp)) return res.status(401).json({ error: 'Invalid OTP' });
+        
+        otpStore.delete(email);
+        
+        let user = await User.findOne({ phoneNumber: email }); // Phone ki jagah database mein email save hoga
+        if (!user) {
+            user = new User({ name: 'User', phoneNumber: email, email: email });
+            await user.save();
+        }
+        const token = jwt.sign({ userId: user._id.toString() }, JWT_SECRET, { expiresIn: '7d' });
+        return res.status(200).json({ message: "Welcome Back!", user, token });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 // 2b. Verify OTP & Issue JWT
 app.post('/api/auth/verify-otp', async (req, res) => {
     try {
