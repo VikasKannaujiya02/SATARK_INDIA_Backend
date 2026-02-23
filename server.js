@@ -22,7 +22,7 @@ const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'satark-india-secret-key-change-in-production';
 
 // Middlewares - CORS open for Android APK + web
-app.use(cors({ origin: '*', credentials: true }));
+app.use(cors());
 app.use(express.json());
 
 // Health check for Render (keeps service awake)
@@ -51,7 +51,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
                     params: {
                         authorization: apiKey,
                         message: `Satark India OTP is ${otp}`,
-                        route: 'q',
+                        route: 'otp',
                         numbers,
                     },
                 });
