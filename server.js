@@ -655,7 +655,7 @@ async function seedHeatmapIfEmpty() {
 }
 
 // Serverless readiness: export app, run server only when executed directly
-const isMainModule = process.argv[1] && fileURLToPath(process.argv[1]) === __filename;
+const isMainModule = process.argv[1] && process.argv[1] === __filename;
 
 if (isMainModule) {
     if (!MONGODB_URI) {
@@ -666,30 +666,16 @@ if (isMainModule) {
         .then(() => seedHeatmapIfEmpty())
         .then(() => {
             console.log('✅ MongoDB connected successfully!');
-            
-            // JUST ADD NEW RENDER FRIENDLY VARIABLE 
+
+            // Render-friendly server startup log (no hardcoded local IPs)
             app.listen(PORT, '0.0.0.0', () => {
-                import('os').then((os) => {
-                    const nets = os.default.networkInterfaces();
-                    let ipv4 = 'localhost';
-                    for (const name of Object.keys(nets || {})) {
-                        for (const net of nets[name] || []) {
-                            if (net.family === 'IPv4' && !net.internal) {
-                                ipv4 = net.address;
-                                break;
-                            }
-                        }
-                        if (ipv4 !== 'localhost') break;
-                    }
-                    console.log('\n' + '═'.repeat(72));
-                    console.log('🔥 SATARK INDIA IS LIVE! 🔥');
-                    console.log('═'.repeat(72));
-                    console.log('To test on your phone, ensure your phone and laptop are on the SAME Wi-Fi.');
-                    console.log('Open your phone\'s browser and go to:');
-                    console.log('  http://' + ipv4 + ':3000');
-                    console.log('═'.repeat(72) + '\n');
-                });
-                console.log('🚀 Server is running on http://localhost:' + PORT);
+                console.log('\n' + '═'.repeat(72));
+                console.log('🔥 SATARK INDIA BACKEND IS LIVE! 🔥');
+                console.log('═'.repeat(72));
+                console.log('Backend is listening on PORT=' + PORT);
+                console.log('If running locally, open:  http://localhost:' + PORT);
+                console.log('In production (Render), access via your deployed frontend URL.');
+                console.log('═'.repeat(72) + '\n');
             });
         })
         .catch(err => console.log('❌ Connection Error:', err));
