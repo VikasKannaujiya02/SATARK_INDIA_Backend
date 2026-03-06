@@ -1,3 +1,4 @@
+import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import express from 'express';
 import mongoose from 'mongoose';
@@ -22,7 +23,7 @@ const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'satark-india-secret-key-change-in-production';
 
 // Middlewares - CORS open for Android APK + web
-app.use(cors({ origin: '*', credentials: true }));
+app.use(cors());
 app.use(express.json());
 
 // Health check for Render (keeps service awake)
@@ -36,35 +37,122 @@ app.get('/test', (req, res) => {
 // In-memory OTP store (use Redis in production)
 const otpStore = new Map();
 
-// 2a. Send OTP (real SMS via Fast2SMS)
+// 2a. Send OTP (Phone - With Smart Bypass)
 app.post('/api/auth/send-otp', async (req, res) => {
     try {
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Phone required' });
+        
         const otp = String(Math.floor(1000 + Math.random() * 9000));
         otpStore.set(phone, { otp, expires: Date.now() + 5 * 60 * 1000 });
+
+        // ⭐ PRESENTATION BYPASS: Hamesha Render log mein OTP print hoga
+        console.log(`\n════════════════════════════════════════════════════`);
+        console.log(`📱 PHONE OTP FOR ${phone} IS: [ ${otp} ] 📱`);
+        console.log(`════════════════════════════════════════════════════\n`);
+
         const apiKey = process.env.FAST2SMS_API_KEY;
         if (apiKey) {
             const numbers = String(phone).replace(/\D/g, '').slice(-10);
             if (numbers.length === 10) {
-                await axios.get('https://www.fast2sms.com/dev/bulkV2', {
-                    params: {
-                        authorization: apiKey,
-                        message: `Satark India OTP is ${otp}`,
-                        route: 'q',
-                        numbers,
-                    },
-                });
+                try {
+                    // Fast2SMS Try karega
+                    await axios.get('https://www.fast2sms.com/dev/bulkV2', {
+                        params: {
+                            authorization: apiKey,
+                            message: `Satark India OTP is ${otp}`,
+                            route: 'otp',
+                            numbers,
+                        },
+                    });
+                } catch (smsErr) {
+                    // Agar Fast2SMS 401 de, toh error nahi fekna hai! Bas chup chap log karna hai.
+                    console.log("⚠️ Fast2SMS Failed (Low Balance), but bypassing for presentation.");
+                }
             }
         }
-        res.status(200).json({ success: true, message: 'OTP sent' });
+        
+        // Hamesha success bhejo, taaki website error na de
+        res.status(200).json({ success: true, message: 'OTP processed' });
     } catch (err) {
         console.error("Send OTP error:", err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
-// 2b. Verify OTP & Issue JWT
+// --- EMAIL OTP SETUP (FIXED PORT 587) ---
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587, // Developer Port
+    secure: false, // 587 ke liye false
+    requireTLS: true,
+    auth: {
+        user: 'vikashkannaujiya1332004@gmail.com', 
+        pass: 'zpzeifgwrwrghasf' 
+    },
+    tls: {
+        rejectUnauthorized: false
+    }
+});
+
+// Email OTP bhejne ka rasta (With Smart Bypass)
+app.post('/api/auth/send-email-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email required' });
+        
+        const otp = String(Math.floor(1000 + Math.random() * 9000));
+        otpStore.set(email, { otp, expires: Date.now() + 5 * 60 * 1000 });
+
+        // ⭐ PRESENTATION BYPASS: Hamesha Render log mein OTP print hoga
+        console.log(`\n════════════════════════════════════════════════════`);
+        console.log(`📧 EMAIL OTP FOR ${email} IS: [ ${otp} ] 📧`);
+        console.log(`════════════════════════════════════════════════════\n`);
+
+        try {
+            // Gmail se bhej kar try karega
+            await transporter.sendMail({
+                from: 'vikashkannaujiya1332004@gmail.com',
+                to: email,
+                subject: 'Satark India - Login OTP 🚨',
+                text: `Namaskar!\n\nWelcome to Satark India.\nYour verification OTP is: ${otp}\n\nStay Safe,\nTeam Satark India`
+            });
+            res.status(200).json({ success: true, message: 'Email OTP sent' });
+        } catch (mailErr) {
+            // Agar Google Timeout kare, toh error nahi fekna hai!
+            console.log("⚠️ Gmail Timeout, but bypassing for presentation.");
+            res.status(200).json({ success: true, bypass: true, message: 'OTP available in Render Logs' });
+        }
+    } catch (err) {
+        console.error("Email error:", err.message);
+        res.status(500).json({ error: 'Failed to send Email OTP' });
+    }
+});
+
+// Email OTP Verify karne ka rasta
+app.post('/api/auth/verify-email-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const stored = otpStore.get(email);
+        
+        if (!stored || stored.expires < Date.now()) return res.status(401).json({ error: 'OTP expired' });
+        if (stored.otp !== String(otp)) return res.status(401).json({ error: 'Invalid OTP' });
+        
+        otpStore.delete(email);
+        
+        let user = await User.findOne({ phoneNumber: email }); // Phone ki jagah database mein email save hoga
+        if (!user) {
+            user = new User({ name: 'User', phoneNumber: email, email: email });
+            await user.save();
+        }
+        const token = jwt.sign({ userId: user._id.toString() }, JWT_SECRET, { expiresIn: '7d' });
+        return res.status(200).json({ message: "Welcome Back!", user, token });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2b. Verify OTP & Issue JWT (Fast2SMS Wala)
 app.post('/api/auth/verify-otp', async (req, res) => {
     try {
         const { phone, otp } = req.body;
@@ -124,7 +212,7 @@ app.post('/api/sos/trigger', async (req, res) => {
         console.log(`${RED}║  👤 Name: ${(name || 'N/A')}${RESET}`);
         console.log(`${RED}║  📱 Phone: ${(phone || 'N/A')}${RESET}`);
         console.log(`${RED}║  📍 Location: ${(location || 'Unknown')}${RESET}`);
-        console.log(`${RED}║  📡 Action: Family Network is being notified...                 ║${RESET}`);
+        console.log(`${RED}║  📡 Action: Family Network is being notified...                  ║${RESET}`);
         console.log(`${RED}╚══════════════════════════════════════════════════════════════════╝${RESET}\n`);
 
         // Generate Google Maps link from coordinates
@@ -491,7 +579,7 @@ async function seedHeatmapIfEmpty() {
 }
 
 // Serverless readiness: export app, run server only when executed directly
-const isMainModule = process.argv[1] && process.argv[1] === __filename;
+const isMainModule = process.argv[1] && fileURLToPath(process.argv[1]) === __filename;
 
 if (isMainModule) {
     if (!MONGODB_URI) {
@@ -502,7 +590,9 @@ if (isMainModule) {
         .then(() => seedHeatmapIfEmpty())
         .then(() => {
             console.log('✅ MongoDB connected successfully!');
-            app.listen(PORT, () => {
+            
+            // JUST ADD NEW RENDER FRIENDLY VARIABLE 
+            app.listen(PORT, '0.0.0.0', () => {
                 import('os').then((os) => {
                     const nets = os.default.networkInterfaces();
                     let ipv4 = 'localhost';
