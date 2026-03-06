@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
+import FormData from 'form-data';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import User from './models/User.js';
@@ -299,7 +300,78 @@ app.post('/api/scan/analyze', async (req, res) => {
     }
 });
 
-const SAVITRI_SYSTEM_PROMPT = 'You are Savitri, an AI Honeypot for Satark India. Scammers are trying to scam you. Act like a gullible, slightly confused Indian user. Waste their time. Never break character.';
+// Dark Web Breach Monitor - proxy to BreachDirectory (RapidAPI)
+app.post('/api/check-darkweb', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email || typeof email !== 'string') {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        const apiKey = process.env.RAPIDAPI_KEY;
+        if (!apiKey) {
+            return res.status(503).json({ error: 'BreachDirectory API key not configured' });
+        }
+
+        const response = await axios.get('https://breachdirectory.p.rapidapi.com/', {
+            params: {
+                func: 'auto',
+                term: email.trim()
+            },
+            headers: {
+                'X-RapidAPI-Key': apiKey,
+                'X-RapidAPI-Host': 'breachdirectory.p.rapidapi.com'
+            },
+            timeout: 10000
+        });
+
+        const data = response.data || {};
+        const breaches = data.result || data.Result || data.breaches || [];
+        const count = Array.isArray(breaches) ? breaches.length : 0;
+
+        return res.status(200).json({ breaches, count });
+    } catch (err) {
+        console.error('Dark web check error:', err?.response?.data || err.message);
+        return res.status(200).json({ breaches: [], count: 0, error: 'Unable to check breaches at this time' });
+    }
+});
+
+// Deepfake Scanner - proxy to Sightengine
+app.post('/api/scan-deepfake', async (req, res) => {
+    try {
+        const { imageBase64 } = req.body;
+        if (!imageBase64 || typeof imageBase64 !== 'string') {
+            return res.status(400).json({ error: 'imageBase64 is required' });
+        }
+
+        const apiUser = process.env.SIGHTENGINE_USER;
+        const apiSecret = process.env.SIGHTENGINE_SECRET;
+        if (!apiUser || !apiSecret) {
+            return res.status(503).json({ error: 'Sightengine credentials not configured' });
+        }
+
+        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        const form = new FormData();
+        form.append('media', buffer, { filename: 'upload.jpg' });
+        form.append('models', 'deepfake');
+        form.append('api_user', apiUser);
+        form.append('api_secret', apiSecret);
+
+        const response = await axios.post('https://api.sightengine.com/1.0/check.json', form, {
+            headers: form.getHeaders(),
+            timeout: 15000
+        });
+
+        const deepfakeScore = response.data?.type?.deepfake ?? null;
+        return res.status(200).json({ deepfake: deepfakeScore, raw: response.data });
+    } catch (err) {
+        console.error('Deepfake scan error:', err?.response?.data || err.message);
+        return res.status(200).json({ deepfake: null, error: 'Unable to scan image at this time' });
+    }
+});
+
+const SAVITRI_SYSTEM_PROMPT = "You are 'Savitri', an elderly, uneducated Indian woman from a village. A cyber scammer is chatting with you. Your only goal is to WASTE THEIR TIME. Act very confused, talk slowly, ask silly questions about your cow or family, and pretend you don't know what UPI, ATM, or OTP is. Keep replies short. Reply strictly in Hinglish (Hindi words in English alphabet).";
 
 // Savitri AI Honeypot (Groq llama3-8b-8192 or OpenAI)
 app.post('/api/chat', async (req, res) => {
@@ -350,7 +422,7 @@ app.post('/api/chat', async (req, res) => {
 // 7. Report Submit - upsert by scammer number, increment reportCount (Protected)
 app.post('/api/report/submit', authMiddleware, async (req, res) => {
     try {
-        const { scammerNumber, platform, description } = req.body;
+        const { scammerNumber, platform, description, isAnonymous } = req.body;
         const num = String(scammerNumber || '').trim();
         if (!num) return res.status(400).json({ error: 'Scammer number is required' });
         
@@ -361,6 +433,9 @@ app.post('/api/report/submit', authMiddleware, async (req, res) => {
             existing.reportCount = (existing.reportCount || 1) + 1;
             existing.description = description || existing.description;
             existing.platform = platform || existing.platform;
+            if (typeof isAnonymous === 'boolean') {
+                existing.isAnonymous = isAnonymous;
+            }
             existing.trackingId = trackingId;
             await existing.save();
             return res.status(201).json({ success: true, trackingId });
@@ -371,6 +446,7 @@ app.post('/api/report/submit', authMiddleware, async (req, res) => {
             platform: platform || 'unknown',
             description: description || '',
             status: 'pending',
+            isAnonymous: !!isAnonymous,
             trackingId,
             reportCount: 1,
         });

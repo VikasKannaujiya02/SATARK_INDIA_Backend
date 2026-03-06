@@ -8,6 +8,7 @@ const reportSchema = new mongoose.Schema({
   reportedBy: { type: String },
   trackingId: { type: String },
   reportCount: { type: Number, default: 1 },
+  isAnonymous: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 
