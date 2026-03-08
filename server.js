@@ -1,14 +1,21 @@
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import FormData from 'form-data';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import Razorpay from 'razorpay';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import User from './models/User.js';
+import Contact from './models/Contact.js';
 import Family from './models/Family.js';
 import Report from './models/Report.js';
 import ScanLog from './models/ScanLog.js';
@@ -21,12 +28,85 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, '.env') });
 const app = express();
-const JWT_SECRET = process.env.JWT_SECRET || 'satark-india-secret-key-change-in-production';
 
-// Middlewares - CORS open for Android APK + web
-app.use(cors());
+// Cloudinary Configuration
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Razorpay Configuration
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+
+if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+    console.warn("⚠️ Warning: Razorpay keys are not defined in .env. Payments will fail.");
+}
+
+const razorpay = new Razorpay({
+    key_id: RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+    key_secret: RAZORPAY_KEY_SECRET || 'placeholder_secret'
+});
+
+// Multer Configuration
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error("❌ CRITICAL: JWT_SECRET is not defined in .env");
+    process.exit(1);
+}
+
+// Middlewares - Secure CORS for Production
+const allowedOrigins = [
+    'http://localhost:3000',
+    'https://satark-india.vercel.app', // Replace with your actual Vercel URL
+    'https://satark-india-frontend.vercel.app'
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    credentials: true
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Socket.io Connection Logic
+io.on('connection', (socket) => {
+    console.log('⚡ New Device Connected to Satark Socket:', socket.id);
+
+    socket.on('send_security_ping', (data) => {
+        console.log('📡 Security Ping Received from:', data.name || socket.id);
+        // Broadcast to everyone else
+        socket.broadcast.emit('receive_security_ping', {
+            ...data,
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('❌ Device Disconnected');
+    });
+});
 
 // Health check for Render (keeps service awake)
 app.get('/ping', (req, res) => res.status(200).send('Satark India Backend is Awake!'));
@@ -235,12 +315,23 @@ app.post('/api/sos/trigger', async (req, res) => {
 // 4. Add Family Member (Protected)
 app.post('/api/family/add', authMiddleware, async (req, res) => {
     try {
-        const { userId, userPhone, name, relation, phoneNumber } = req.body;
-        const lookup = userId || userPhone;
-        if (!lookup || !name || !relation || !phoneNumber) {
-            return res.status(400).json({ error: "userId/userPhone, name, relation, and phoneNumber are required" });
+        const { name, relation, phoneNumber } = req.body;
+        
+        if (!name || !relation || !phoneNumber) {
+            return res.status(400).json({ error: "name, relation, and phoneNumber are required" });
         }
-        const family = new Family({ userId: lookup, userPhone: userPhone || lookup, name, relation, phoneNumber });
+
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        const family = new Family({ 
+            userId: req.userId, 
+            userPhone: user.phoneNumber, 
+            name, 
+            relation, 
+            phoneNumber 
+        });
+        
         await family.save();
         res.status(201).json({ success: true, family });
     } catch (err) {
@@ -249,10 +340,29 @@ app.post('/api/family/add', authMiddleware, async (req, res) => {
     }
 });
 
-// 5. Get Family Members - by phone or userId (Protected)
+// 5. Get Family Members - Securely filtered by current user (Protected)
+app.get('/api/family/my', authMiddleware, async (req, res) => {
+    try {
+        const family = await Family.find({ userId: req.userId }).sort({ createdAt: -1 });
+        res.status(200).json(family);
+    } catch (err) {
+        console.error("Family fetch error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Backward compatibility for old frontend call (still secured by token)
 app.get('/api/family/:phone', authMiddleware, async (req, res) => {
     try {
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        
         const { phone } = req.params;
+        // Only allow fetching if the phone matches the logged-in user's phone
+        if (phone !== user.phoneNumber && phone !== req.userId) {
+            return res.status(403).json({ error: "Forbidden: You can only access your own family network." });
+        }
+
         const family = await Family.find({ $or: [{ userId: phone }, { userPhone: phone }] }).sort({ createdAt: -1 });
         res.status(200).json(family);
     } catch (err) {
@@ -448,6 +558,7 @@ app.post('/api/report/submit', authMiddleware, async (req, res) => {
             description: description || '',
             status: 'pending',
             isAnonymous: !!isAnonymous,
+            reportedBy: isAnonymous ? "MASKED_USER" : req.userId,
             trackingId,
             reportCount: 1,
         });
@@ -562,6 +673,380 @@ Submit at: https://cybercrime.gov.in`;
     }
 });
 
+// Action 3: User Profile & Emergency Contact Routes
+app.get('/api/users/profile', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        res.status(200).json(user);
+    } catch (err) {
+        console.error("Profile fetch error:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.put('/api/users/profile', authMiddleware, async (req, res) => {
+    try {
+        const { name, avatar } = req.body;
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        if (name) user.name = name;
+        if (avatar) user.avatar = avatar;
+
+        await user.save();
+        res.status(200).json({ success: true, user });
+    } catch (err) {
+        console.error("Profile update error:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.get('/api/contacts', authMiddleware, async (req, res) => {
+    try {
+        const contacts = await Contact.find({ userId: req.userId }).sort({ createdAt: -1 });
+        res.status(200).json(contacts);
+    } catch (err) {
+        console.error("Contacts fetch error:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.post('/api/contacts', authMiddleware, async (req, res) => {
+    try {
+        const { name, relation, phone, email } = req.body;
+        if (!name || !relation || !phone) {
+            return res.status(400).json({ error: "Name, relation, and phone are required" });
+        }
+
+        const contact = new Contact({
+            userId: req.userId,
+            name,
+            relation,
+            phone,
+            email
+        });
+
+        await contact.save();
+        res.status(201).json({ success: true, contact });
+    } catch (err) {
+        console.error("Contact creation error:", err.message);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Action 1: Settings API (/api/user/settings)
+app.get('/api/user/settings', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.userId).select('settings');
+        if (!user) return res.status(404).json({ error: "User not found" });
+        res.status(200).json(user.settings || { darkMode: true, notifications: true, language: 'en' });
+    } catch (err) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.put('/api/user/settings', authMiddleware, async (req, res) => {
+    try {
+        const { darkMode, notifications, language } = req.body;
+        const user = await User.findById(req.userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        if (user.settings) {
+            if (darkMode !== undefined) user.settings.darkMode = darkMode;
+            if (notifications !== undefined) user.settings.notifications = notifications;
+            if (language !== undefined) user.settings.language = language;
+        } else {
+            user.settings = { 
+                darkMode: darkMode ?? true, 
+                notifications: notifications ?? true, 
+                language: language ?? 'en' 
+            };
+        }
+
+        await user.save();
+        res.status(200).json({ success: true, settings: user.settings });
+    } catch (err) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Real Profile Photo Upload (Cloudinary)
+app.post('/api/user/upload-avatar', authMiddleware, upload.single('avatar'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+        // Convert buffer to base64
+        const fileStr = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+        
+        const uploadResponse = await cloudinary.uploader.upload(fileStr, {
+            folder: 'satark_avatars',
+            resource_type: 'auto'
+        });
+
+        const user = await User.findById(req.userId);
+        user.avatar = uploadResponse.secure_url;
+        await user.save();
+
+        res.status(200).json({ success: true, avatar: user.avatar });
+    } catch (err) {
+        console.error("Avatar upload error:", err);
+        res.status(500).json({ error: "Failed to upload avatar" });
+    }
+});
+
+// Storage Calculation API
+app.get('/api/user/storage-usage', authMiddleware, async (req, res) => {
+    try {
+        // Calculate storage based on reports length (simplified simulation)
+        const reports = await Report.find({ reportedBy: req.userId });
+        const reportSize = JSON.stringify(reports).length;
+        
+        // Convert to KB or MB
+        const sizeInKB = (reportSize / 1024).toFixed(2);
+        res.status(200).json({ size: `${sizeInKB} KB` });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to calculate storage" });
+    }
+});
+
+// Razorpay: Initiate Insurance Payment
+app.post('/api/insurance/pay', authMiddleware, async (req, res) => {
+    try {
+        const options = {
+            amount: 49900, // Amount in paise (499.00 INR)
+            currency: "INR",
+            receipt: `receipt_${Date.now()}`
+        };
+        const order = await razorpay.orders.create(options);
+        res.status(200).json(order);
+    } catch (err) {
+        res.status(500).json({ error: "Failed to initiate payment" });
+    }
+});
+
+// Razorpay: Verify Payment
+app.post('/api/insurance/verify', authMiddleware, async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+        const body = razorpay_order_id + "|" + razorpay_payment_id;
+        const expectedSignature = crypto
+            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || 'placeholder_secret')
+            .update(body.toString())
+            .digest("hex");
+
+        if (expectedSignature === razorpay_signature) {
+            const user = await User.findById(req.userId);
+            user.isInsured = true;
+            await user.save();
+            res.status(200).json({ success: true, message: "Payment verified successfully" });
+        } else {
+            res.status(400).json({ success: false, message: "Invalid signature" });
+        }
+    } catch (err) {
+        res.status(500).json({ error: "Payment verification failed" });
+    }
+});
+
+// Action 2: System Status & Updates
+app.get('/api/system/status', async (req, res) => {
+    // In a real app, this status could be fetched from a config DB or Redis
+    res.status(200).json({
+        version: "1.0.5",
+        killSwitch: false, // Set to true to trigger maintenance mode
+        maintenanceMessage: "Satark India is under scheduled maintenance. We'll be back shortly."
+    });
+});
+
+// Action 2: System Update API (/api/system/version)
+app.get('/api/system/version', async (req, res) => {
+    res.status(200).json({
+        version: "1.0.5",
+        changelog: [
+            "Real-time KYC verification",
+            "Backend integrated profile and settings",
+            "Emergency SOS with military-grade encryption",
+            "Socket-based family network pings"
+        ],
+        forceUpdate: false
+    });
+});
+
+// Action 3: KYC Approval Logic (/api/admin/verify-kyc)
+app.post('/api/admin/verify-kyc', async (req, res) => {
+    try {
+        const { userId, status } = req.body; // status: true or false
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+
+        user.isKycVerified = status ?? true;
+        await user.save();
+
+        res.status(200).json({ success: true, isKycVerified: user.isKycVerified });
+    } catch (err) {
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+// Action 2: Real Scam Sync (AbuseIPDB)
+app.get('/api/sync-scams', async (req, res) => {
+    try {
+        const apiKey = process.env.ABUSEIPDB_API_KEY;
+        if (!apiKey) {
+            return res.status(503).json({ error: "AbuseIPDB API key not configured" });
+        }
+
+        const response = await axios.get('https://api.abuseipdb.com/api/v2/blacklist', {
+            params: {
+                confidenceMinimum: 90,
+                limit: 100
+            },
+            headers: {
+                'Key': apiKey,
+                'Accept': 'application/json'
+            },
+            timeout: 10000
+        });
+
+        res.status(200).json(response.data);
+    } catch (err) {
+        console.error("AbuseIPDB sync error:", err.message);
+        res.status(500).json({ error: "Failed to sync with AbuseIPDB" });
+    }
+});
+
+// Action 3: Razorpay Order Creation
+app.post('/api/create-insurance-order', authMiddleware, async (req, res) => {
+    try {
+        const options = {
+            amount: 49900, // Amount in paise (499.00 INR)
+            currency: "INR",
+            receipt: `ins_receipt_${Date.now()}`,
+            notes: {
+                type: "cyber_insurance",
+                userId: req.userId
+            }
+        };
+        const order = await razorpay.orders.create(options);
+        res.status(200).json({ success: true, orderId: order.id, amount: order.amount });
+    } catch (err) {
+        console.error("Razorpay order creation error:", err.message);
+        res.status(500).json({ error: "Failed to create insurance order" });
+    }
+});
+
+// Action 1: Auto Complaint API (/api/generate-complaint)
+app.post('/api/generate-complaint', async (req, res) => {
+    try {
+        const { userStory } = req.body;
+        if (!userStory) return res.status(400).json({ error: "userStory is required" });
+
+        const complaintText = `
+══════════════════════════════════════════════════════
+       OFFICIAL CYBER CRIME COMPLAINT FORM
+══════════════════════════════════════════════════════
+
+TO,
+THE OFFICER-IN-CHARGE,
+CYBER CRIME CELL, INDIA.
+
+DATE: ${new Date().toLocaleDateString('en-IN')}
+LOCATION: DIGITAL PORTAL
+
+SUBJECT: FORMAL COMPLAINT REGARDING CYBER FRAUD/OFFENSE
+
+RESPECTED SIR/MADAM,
+
+I AM WRITING TO FORMALLY REPORT A CYBER CRIME INCIDENT. THE DETAILS OF THE INCIDENT AS NARRATED BY THE COMPLAINANT ARE AS FOLLOWS:
+
+--- INCIDENT DESCRIPTION ---
+${userStory}
+
+--- LEGAL PROVISIONS ---
+THIS COMPLAINT IS FILED UNDER THE RELEVANT SECTIONS OF:
+1. THE INFORMATION TECHNOLOGY ACT, 2000
+2. THE INDIAN PENAL CODE (IPC) SECTIONS 419/420 (CHEATING)
+
+--- REQUESTED ACTION ---
+I REQUEST YOU TO KINDLY REGISTER AN FIR BASED ON THE ABOVE NARRATION AND INITIATE AN INVESTIGATION TO IDENTIFY AND APPREHEND THE CULPRITS. PLEASE ALSO INITIATE THE PROCESS OF BLOCKING THE FRAUDULENT ACCOUNTS/NUMBERS MENTIONED IN THE DESCRIPTION.
+
+FAITHFULLY,
+[COMPLAINANT NAME - DIGITAL SIGNATURE]
+CONTACT: [MOBILE NUMBER]
+
+--- END OF COMPLAINT ---
+GENERATED VIA SATARK INDIA AI ENGINE
+        `.trim();
+
+        res.status(200).json({ success: true, complaintText });
+    } catch (err) {
+        console.error("Generate complaint error:", err.message);
+        res.status(500).json({ error: "Failed to generate complaint" });
+    }
+});
+
+// Action 2: Scanner API (/api/scan-query)
+app.post('/api/scan-query', async (req, res) => {
+    try {
+        const { query, type } = req.body;
+        if (!query) return res.status(400).json({ error: "Query is required" });
+
+        const lowerQuery = query.toLowerCase();
+        const highRiskKeywords = ['kyc', 'lottery', 'free', 'win', 'prize', 'urgent', 'suspend', 'block', 'update', 'verify'];
+        const suspiciousPatterns = [/bit\.ly/, /t\.me/, /wa\.me/, /gift/, /offer/];
+
+        const foundKeywords = highRiskKeywords.filter(kw => lowerQuery.includes(kw));
+        const matchesPattern = suspiciousPatterns.some(regex => regex.test(lowerQuery));
+
+        let riskLevel = "Low";
+        let message = "This input appears safe based on basic scanning.";
+
+        if (foundKeywords.length >= 2 || matchesPattern) {
+            riskLevel = "High";
+            message = `CRITICAL: High risk detected! Found keywords: ${foundKeywords.join(', ')}. This looks like a phishing attempt.`;
+        } else if (foundKeywords.length === 1) {
+            riskLevel = "Medium";
+            message = `WARNING: Suspicious keyword found: ${foundKeywords[0]}. Proceed with caution.`;
+        }
+
+        res.status(200).json({ success: true, riskLevel, message });
+    } catch (err) {
+        console.error("Scan query error:", err.message);
+        res.status(500).json({ error: "Scan failed" });
+    }
+});
+
+// Action 3: Real Reporting API (/api/scam-reports)
+app.post('/api/scam-reports', authMiddleware, async (req, res) => {
+    try {
+        const { name, phone, scamDetails, platform, isAnonymous } = req.body;
+        
+        const trackingId = 'SATARK-REP-' + Math.floor(100000 + Math.random() * 900000);
+        
+        const report = new Report({
+            scammerNumber: phone || 'Unknown',
+            platform: platform || 'unknown',
+            description: scamDetails || '',
+            status: 'pending',
+            isAnonymous: !!isAnonymous,
+            reportedBy: isAnonymous ? "MASKED_USER" : (req.userId || name || 'Anonymous'),
+            trackingId,
+            reportCount: 1,
+        });
+
+        await report.save();
+        
+        res.status(201).json({ 
+            success: true, 
+            message: "Report saved successfully to database.",
+            trackingId 
+        });
+    } catch (err) {
+        console.error("Scam report error:", err.message);
+        res.status(500).json({ error: "Failed to save report" });
+    }
+});
+
 // 10. Daily Check-in - Streak & Trust Score gamification
 app.post('/api/trust/daily-checkin', async (req, res) => {
     try {
@@ -668,12 +1153,13 @@ if (isMainModule) {
         .then(() => {
             console.log('✅ MongoDB connected successfully!');
 
-            // Render-friendly server startup log (no hardcoded local IPs)
-            app.listen(PORT, '0.0.0.0', () => {
+            // Use httpServer instead of app to enable Socket.io
+            httpServer.listen(PORT, '0.0.0.0', () => {
                 console.log('\n' + '═'.repeat(72));
                 console.log('🔥 SATARK INDIA BACKEND IS LIVE! 🔥');
                 console.log('═'.repeat(72));
                 console.log('Backend is listening on PORT=' + PORT);
+                console.log('Socket.io initialized on same port.');
                 console.log('If running locally, open:  http://localhost:' + PORT);
                 console.log('In production (Render), access via your deployed frontend URL.');
                 console.log('═'.repeat(72) + '\n');

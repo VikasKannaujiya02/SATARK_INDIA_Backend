@@ -4,12 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "cd \"SATARK_INDIA Fronted\" && npm run dev",
-    "build": "cd \"SATARK_INDIA Fronted\" && npm run build",
-    "start": "cd \"SATARK_INDIA Fronted\" && npm run start",
-    "lint": "cd \"SATARK_INDIA Fronted\" && npm run lint",
+    "dev": "cd ../SATARK_INDIA_Fronted && npm run dev",
+    "build": "cd ../SATARK_INDIA_Fronted && npm run build",
+    "start": "cd ../SATARK_INDIA_Fronted && npm run start",
+    "lint": "cd ../SATARK_INDIA_Fronted && npm run lint",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "node \"SATARK_INDIA Backend/server.js\""
+    "server": "node server.js"
   },
   "keywords": [],
   "author": "",
@@ -17,12 +17,17 @@
   "type": "module",
   "dependencies": {
     "axios": "^1.13.5",
+    "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
+    "crypto": "^1.0.1",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "html2canvas": "^1.4.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.2.1",
-    "nodemailer": "^6.10.1"
+    "multer": "^2.1.1",
+    "nodemailer": "^6.10.1",
+    "razorpay": "^2.9.6",
+    "socket.io": "^4.8.3"
   }
 }
