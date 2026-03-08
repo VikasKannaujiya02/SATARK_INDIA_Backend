@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+﻿import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import express from 'express';
 import { createServer } from 'http';
@@ -41,7 +41,7 @@ const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
 
 if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-    console.warn("⚠️ Warning: Razorpay keys are not defined in .env. Payments will fail.");
+    console.warn("âš ï¸ Warning: Razorpay keys are not defined in .env. Payments will fail.");
 }
 
 const razorpay = new Razorpay({
@@ -63,7 +63,7 @@ const io = new Server(httpServer, {
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-    console.error("❌ CRITICAL: JWT_SECRET is not defined in .env");
+    console.error("âŒ CRITICAL: JWT_SECRET is not defined in .env");
     process.exit(1);
 }
 
@@ -92,10 +92,10 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Socket.io Connection Logic
 io.on('connection', (socket) => {
-    console.log('⚡ New Device Connected to Satark Socket:', socket.id);
+    console.log('âš¡ New Device Connected to Satark Socket:', socket.id);
 
     socket.on('send_security_ping', (data) => {
-        console.log('📡 Security Ping Received from:', data.name || socket.id);
+        console.log('ðŸ“¡ Security Ping Received from:', data.name || socket.id);
         // Broadcast to everyone else
         socket.broadcast.emit('receive_security_ping', {
             ...data,
@@ -104,7 +104,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('❌ Device Disconnected');
+        console.log('âŒ Device Disconnected');
     });
 });
 
@@ -113,7 +113,7 @@ app.get('/ping', (req, res) => res.status(200).send('Satark India Backend is Awa
 
 // 1. Test Route 
 app.get('/test', (req, res) => {
-    res.send("🚀 Satark Backend Engine is LIVE and Working!");
+    res.send("ðŸš€ Satark Backend Engine is LIVE and Working!");
 });
 
 // In-memory OTP store (use Redis in production)
@@ -125,13 +125,13 @@ app.post('/api/auth/send-otp', async (req, res) => {
         const { phone } = req.body;
         if (!phone) return res.status(400).json({ error: 'Phone required' });
         
-        const otp = String(Math.floor(1000 + Math.random() * 9000));
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
         otpStore.set(phone, { otp, expires: Date.now() + 5 * 60 * 1000 });
 
-        // ⭐ PRESENTATION BYPASS: Hamesha Render log mein OTP print hoga
-        console.log(`\n════════════════════════════════════════════════════`);
-        console.log(`📱 PHONE OTP FOR ${phone} IS: [ ${otp} ] 📱`);
-        console.log(`════════════════════════════════════════════════════\n`);
+        // â­ PRESENTATION BYPASS: Hamesha Render log mein OTP print hoga
+        console.log(`\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•`);
+        console.log(`ðŸ“± PHONE OTP FOR ${phone} IS: [ ${otp} ] ðŸ“±`);
+        console.log(`â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n`);
 
         const apiKey = process.env.FAST2SMS_API_KEY;
         if (apiKey) {
@@ -149,7 +149,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
                     });
                 } catch (smsErr) {
                     // Agar Fast2SMS 401 de, toh error nahi fekna hai! Bas chup chap log karna hai.
-                    console.log("⚠️ Fast2SMS Failed (Low Balance), but bypassing for presentation.");
+                    console.log("âš ï¸ Fast2SMS Failed (Low Balance), but bypassing for presentation.");
                 }
             }
         }
@@ -183,26 +183,26 @@ app.post('/api/auth/send-email-otp', async (req, res) => {
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email required' });
         
-        const otp = String(Math.floor(1000 + Math.random() * 9000));
+        const otp = String(Math.floor(100000 + Math.random() * 900000));
         otpStore.set(email, { otp, expires: Date.now() + 5 * 60 * 1000 });
 
-        // ⭐ PRESENTATION BYPASS: Hamesha Render log mein OTP print hoga
-        console.log(`\n════════════════════════════════════════════════════`);
-        console.log(`📧 EMAIL OTP FOR ${email} IS: [ ${otp} ] 📧`);
-        console.log(`════════════════════════════════════════════════════\n`);
+        // â­ PRESENTATION BYPASS: Hamesha Render log mein OTP print hoga
+        console.log(`\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•`);
+        console.log(`ðŸ“§ EMAIL OTP FOR ${email} IS: [ ${otp} ] ðŸ“§`);
+        console.log(`â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•\n`);
 
         try {
             // Gmail se bhej kar try karega
             await transporter.sendMail({
                 from: 'vikashkannaujiya1332004@gmail.com',
                 to: email,
-                subject: 'Satark India - Login OTP 🚨',
+                subject: 'Satark India - Login OTP ðŸš¨',
                 text: `Namaskar!\n\nWelcome to Satark India.\nYour verification OTP is: ${otp}\n\nStay Safe,\nTeam Satark India`
             });
             res.status(200).json({ success: true, message: 'Email OTP sent' });
         } catch (mailErr) {
             // Agar Google Timeout kare, toh error nahi fekna hai!
-            console.log("⚠️ Gmail Timeout, but bypassing for presentation.");
+            console.log("âš ï¸ Gmail Timeout, but bypassing for presentation.");
             res.status(200).json({ success: true, bypass: true, message: 'OTP available in Render Logs' });
         }
     } catch (err) {
@@ -288,14 +288,14 @@ app.post('/api/sos/trigger', async (req, res) => {
         // MASSIVE RED ALERT in terminal (ANSI escape codes)
         const RED = '\x1b[1m\x1b[31m';
         const RESET = '\x1b[0m';
-        console.log(`\n${RED}╔══════════════════════════════════════════════════════════════════╗${RESET}`);
-        console.log(`${RED}║  🚨 RED EMERGENCY - SOS / SCAM ALERT TRIGGERED 🚨                ║${RESET}`);
-        console.log(`${RED}╠══════════════════════════════════════════════════════════════════╣${RESET}`);
-        console.log(`${RED}║  👤 Name: ${(name || 'N/A')}${RESET}`);
-        console.log(`${RED}║  📱 Phone: ${(phone || 'N/A')}${RESET}`);
-        console.log(`${RED}║  📍 Location: ${(location || 'Unknown')}${RESET}`);
-        console.log(`${RED}║  📡 Action: Family Network is being notified...                  ║${RESET}`);
-        console.log(`${RED}╚══════════════════════════════════════════════════════════════════╝${RESET}\n`);
+        console.log(`\n${RED}â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—${RESET}`);
+        console.log(`${RED}â•‘  ðŸš¨ RED EMERGENCY - SOS / SCAM ALERT TRIGGERED ðŸš¨                â•‘${RESET}`);
+        console.log(`${RED}â• â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•£${RESET}`);
+        console.log(`${RED}â•‘  ðŸ‘¤ Name: ${(name || 'N/A')}${RESET}`);
+        console.log(`${RED}â•‘  ðŸ“± Phone: ${(phone || 'N/A')}${RESET}`);
+        console.log(`${RED}â•‘  ðŸ“ Location: ${(location || 'Unknown')}${RESET}`);
+        console.log(`${RED}â•‘  ðŸ“¡ Action: Family Network is being notified...                  â•‘${RESET}`);
+        console.log(`${RED}â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•${RESET}\n`);
 
         // Generate Google Maps link from coordinates
         const userLat = lat || 28.6139;
@@ -538,7 +538,7 @@ app.post('/api/report/submit', authMiddleware, async (req, res) => {
         if (!num) return res.status(400).json({ error: 'Scammer number is required' });
         
         const existing = await Report.findOne({ scammerNumber: num });
-        const trackingId = 'SATARK-TXT-' + Math.floor(1000 + Math.random() * 9000);
+        const trackingId = 'SATARK-TXT-' + Math.floor(100000 + Math.random() * 900000);
         
         if (existing) {
             existing.reportCount = (existing.reportCount || 1) + 1;
@@ -646,7 +646,7 @@ Date of Complaint: ${new Date().toLocaleDateString('en-IN')}
 --- INCIDENT SUMMARY ---
 Type: Cyber Fraud / Financial Scam
 Platform: Digital Payment / UPI / Other
-Estimated Loss: ₹${amount}
+Estimated Loss: â‚¹${amount}
 Incident Description: ${details}
 
 --- FORMAL COMPLAINT TEXT ---
@@ -657,7 +657,7 @@ INCIDENT DETAILS:
 ${details}
 
 FINANCIAL LOSS:
-I have suffered a financial loss of ₹${amount} (or equivalent) due to the above-mentioned fraudulent activity.
+I have suffered a financial loss of â‚¹${amount} (or equivalent) due to the above-mentioned fraudulent activity.
 
 I request the concerned authorities to investigate this matter and take appropriate legal action under the Information Technology Act, 2000 and Indian Penal Code.
 
@@ -942,9 +942,9 @@ app.post('/api/generate-complaint', async (req, res) => {
         if (!userStory) return res.status(400).json({ error: "userStory is required" });
 
         const complaintText = `
-══════════════════════════════════════════════════════
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
        OFFICIAL CYBER CRIME COMPLAINT FORM
-══════════════════════════════════════════════════════
+â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 TO,
 THE OFFICER-IN-CHARGE,
@@ -1133,7 +1133,7 @@ async function seedHeatmapIfEmpty() {
         const count = await HeatmapSpot.countDocuments();
         if (count === 0) {
             await HeatmapSpot.insertMany(HEATMAP_SEED);
-            console.log('✅ Heatmap seeded with', HEATMAP_SEED.length, 'spots');
+            console.log('âœ… Heatmap seeded with', HEATMAP_SEED.length, 'spots');
         }
     } catch (err) {
         console.warn('Heatmap seed skip:', err.message);
@@ -1145,27 +1145,67 @@ const isMainModule = process.argv[1] && process.argv[1] === __filename;
 
 if (isMainModule) {
     if (!MONGODB_URI) {
-        console.error('❌ MONGODB_URI is required in .env');
+        console.error('âŒ MONGODB_URI is required in .env');
         process.exit(1);
     }
     mongoose.connect(MONGODB_URI)
         .then(() => seedHeatmapIfEmpty())
         .then(() => {
-            console.log('✅ MongoDB connected successfully!');
+            console.log('âœ… MongoDB connected successfully!');
 
             // Use httpServer instead of app to enable Socket.io
             httpServer.listen(PORT, '0.0.0.0', () => {
-                console.log('\n' + '═'.repeat(72));
-                console.log('🔥 SATARK INDIA BACKEND IS LIVE! 🔥');
-                console.log('═'.repeat(72));
+                console.log('\n' + 'â•'.repeat(72));
+                console.log('ðŸ”¥ SATARK INDIA BACKEND IS LIVE! ðŸ”¥');
+                console.log('â•'.repeat(72));
                 console.log('Backend is listening on PORT=' + PORT);
                 console.log('Socket.io initialized on same port.');
                 console.log('If running locally, open:  http://localhost:' + PORT);
                 console.log('In production (Render), access via your deployed frontend URL.');
-                console.log('═'.repeat(72) + '\n');
+                console.log('â•'.repeat(72) + '\n');
             });
         })
-        .catch(err => console.log('❌ Connection Error:', err));
+        .catch(err => console.log('âŒ Connection Error:', err));
 }
 
 export default app;
+
+// Admin Login Endpoint
+app.post('/api/auth/admin-login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+    
+    // Simple admin authentication (in production, use proper password hashing)
+    const ADMIN_EMAIL = 'admin@satark.com';
+    const ADMIN_PASSWORD = 'admin@satark.com'; // Change in production!
+    
+    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      const adminUser = {
+        id: 'admin-001',
+        name: 'SATARK Admin',
+        email: email,
+        role: 'admin',
+        isAdmin: true
+      };
+      
+      const token = jwt.sign({ userId: adminUser.id, role: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
+      
+      res.status(200).json({
+        success: true,
+        token: token,
+        admin: adminUser,
+        message: 'Admin authenticated successfully'
+      });
+    } else {
+      res.status(401).json({ error: 'Invalid admin credentials' });
+    }
+  } catch (err) {
+    console.error('Admin login error:', err.message);
+    res.status(500).json({ error: 'Admin login failed' });
+  }
+});
+
