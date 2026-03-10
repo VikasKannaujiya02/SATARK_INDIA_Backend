@@ -1,4 +1,4 @@
-﻿import nodemailer from 'nodemailer';
+import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import express from 'express';
 import { createServer } from 'http';
@@ -68,21 +68,10 @@ if (!JWT_SECRET) {
 }
 
 // Middlewares - Secure CORS for Production
-const allowedOrigins = [
-    'http://localhost:3000',
-    'https://satark-india.vercel.app', // Replace with your actual Vercel URL
-    'https://satark-india-frontend.vercel.app'
-];
-
 app.use(cors({
     origin: function (origin, callback) {
-        // allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-            return callback(new Error(msg), false);
-        }
-        return callback(null, true);
+        // allow all origins temporarily for development/testing
+        callback(null, true);
     },
     credentials: true
 }));
