@@ -270,7 +270,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// 🟢 NEW ADDITION: Firebase Sync Route for Google Login (ADDED HERE)
+// 🟢 NEW ADDITION: Firebase Sync Route for Google Login (FIXED MONGO ERROR)
 app.post('/api/auth/firebase-sync', async (req, res) => {
     try {
         const { email, name, phoneNumber, photoURL, uid } = req.body;
@@ -279,11 +279,15 @@ app.post('/api/auth/firebase-sync', async (req, res) => {
             return res.status(400).json({ error: 'Email or Phone is required for sync' });
         }
 
+        // 🔥 FIX: Agar phone number nahi hai, toh Email ko hi phone number maan lo!
+        const safePhone = phoneNumber || email || `GOOGLE_${Date.now()}`;
+
         // Check if user already exists
         let user = await User.findOne({
             $or: [
                 { email: email },
-                { phoneNumber: phoneNumber }
+                { phoneNumber: safePhone },
+                { phoneNumber: email } 
             ].filter(Boolean)
         });
 
@@ -292,7 +296,7 @@ app.post('/api/auth/firebase-sync', async (req, res) => {
             user = new User({
                 name: name || 'Google User',
                 email: email,
-                phoneNumber: phoneNumber || null,
+                phoneNumber: safePhone, // Yahan ab null nahi jayega
                 avatar: photoURL || null
             });
             await user.save();
