@@ -270,6 +270,50 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+// 🟢 NEW ADDITION: Firebase Sync Route for Google Login (ADDED HERE)
+app.post('/api/auth/firebase-sync', async (req, res) => {
+    try {
+        const { email, name, phoneNumber, photoURL, uid } = req.body;
+
+        if (!email && !phoneNumber) {
+            return res.status(400).json({ error: 'Email or Phone is required for sync' });
+        }
+
+        // Check if user already exists
+        let user = await User.findOne({
+            $or: [
+                { email: email },
+                { phoneNumber: phoneNumber }
+            ].filter(Boolean)
+        });
+
+        if (!user) {
+            // Create a new user if they don't exist in MongoDB
+            user = new User({
+                name: name || 'Google User',
+                email: email,
+                phoneNumber: phoneNumber || null,
+                avatar: photoURL || null
+            });
+            await user.save();
+        } else {
+            // Update profile pic if missing
+            if (!user.avatar && photoURL) {
+                user.avatar = photoURL;
+                await user.save();
+            }
+        }
+
+        // Generate Satark Token
+        const token = jwt.sign({ userId: user._id.toString() }, JWT_SECRET, { expiresIn: '7d' });
+        
+        return res.status(200).json({ message: "Firebase Sync Successful!", user, token });
+    } catch (err) {
+        console.error("Firebase Sync Error:", err.message);
+        res.status(500).json({ error: "Internal server error during sync" });
+    }
+});
+
 // 3. SOS Alert API - Receives { name, phone, location, lat, lng }
 app.post('/api/sos/trigger', async (req, res) => {
     try {
